@@ -203,8 +203,30 @@ async function loadBinanceWeekly200(symbol){
   return sma(closes, 200);
 }
 async function loadSilverSpot(){
-  const data = await fetchJSON('https://data-asg.goldprice.org/dbXRates/USD');
-  return parseFloat(data.items[0].xagPrice);
+  // Mehrere kostenlose, schlüssellose Quellen nacheinander versuchen — je nach Hosting-Domain
+  // kann eine einzelne Quelle CORS blockieren, daher hier eine Fallback-Kette.
+  const sources = [
+    async () => {
+      const data = await fetchJSON('https://data-asg.goldprice.org/dbXRates/USD');
+      return parseFloat(data.items[0].xagPrice);
+    },
+    async () => {
+      const data = await fetchJSON('https://api.gold-api.com/price/XAG');
+      return parseFloat(data.price);
+    },
+    async () => {
+      const data = await fetchJSON('https://www.freeforexapi.com/api/live?pairs=XAGUSD');
+      return parseFloat(data.rates.XAGUSD.rate);
+    }
+  ];
+  let lastErr = null;
+  for(const source of sources){
+    try{
+      const price = await source();
+      if(price && !isNaN(price)) return price;
+    } catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error('Keine Silber-Quelle erreichbar');
 }
 async function loadFNG(){
   const data = await fetchJSON('https://api.alternative.me/fng/?limit=1');
