@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Marktampel — Gold · Silber · Bitcoin (Live)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0B0F14;
+    --panel: #12181F;
+    --panel-2: #171E27;
+    --bezel: #05070A;
+    --hairline: #232B35;
+    --ink: #E7ECF2;
+    --ink-dim: #8A96A3;
+    --gold: #C9A227;
+    --silver: #AEB7C1;
+    --btc: #F7931A;
+    --green: #3DDC84;
+    --yellow: #F5C744;
+    --red: #E5484D;
+    --green-dim: #123322;
+    --yellow-dim: #34290C;
+    --red-dim: #331414;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;-webkit-font-smoothing:antialiased;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+
+  .wrap{max-width:920px;margin:0 auto;padding:20px 16px 48px;}
+
+  .masthead{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--hairline);padding-bottom:14px;margin-bottom:18px;}
+  .masthead h1{font-size:19px;letter-spacing:.04em;text-transform:uppercase;margin:0;font-weight:600;}
+  .masthead .sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-dim);}
+
+  .status-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-dim);flex-wrap:wrap;}
+  .status-row .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px var(--green);}
+  .btns{display:flex;gap:8px;}
+  button{background:var(--panel-2);color:var(--ink);border:1px solid var(--hairline);border-radius:6px;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:.03em;}
+  button:hover{border-color:var(--ink-dim);}
+  button:active{transform:translateY(1px);}
+  button.on{border-color:var(--green);color:var(--green);}
+
+  .boards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+  @media (max-width:680px){ .boards{grid-template-columns:1fr;} }
+
+  .board{background:var(--panel);border:1px solid var(--hairline);border-radius:10px;padding:16px;position:relative;overflow:hidden;}
+  .board::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;}
+  .board.gold::before{background:var(--gold);}
+  .board.silver::before{background:var(--silver);}
+  .board.btc::before{background:var(--btc);}
+
+  .board-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .asset-name{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-dim);}
+  .asset-name b{color:var(--ink);font-weight:600;}
+
+  .ampel-housing{background:var(--bezel);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;width:34px;margin:0 auto 14px;}
+  .bulb{width:18px;height:18px;border-radius:50%;margin:0 auto;background:#1a1f26;opacity:.35;}
+  .bulb.lit-red{background:var(--red);opacity:1;box-shadow:0 0 10px 2px rgba(229,72,77,.7);}
+  .bulb.lit-yellow{background:var(--yellow);opacity:1;box-shadow:0 0 10px 2px rgba(245,199,68,.7);}
+  .bulb.lit-green{background:var(--green);opacity:1;box-shadow:0 0 10px 2px rgba(61,220,132,.7);animation:pulse 2.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 10px 2px rgba(61,220,132,.7);}50%{box-shadow:0 0 16px 4px rgba(61,220,132,.9);}}
+
+  .price{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;text-align:center;letter-spacing:-.01em;}
+  .verdict{text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:8px 0 12px;font-weight:600;padding:5px 0;border-radius:5px;}
+  .verdict.green{background:var(--green-dim);color:var(--green);}
+  .verdict.yellow{background:var(--yellow-dim);color:var(--yellow);}
+  .verdict.red{background:var(--red-dim);color:var(--red);}
+
+  .metrics{border-top:1px solid var(--hairline);padding-top:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .metric-line{display:flex;justify-content:space-between;padding:3px 0;color:var(--ink-dim);}
+  .metric-line span:last-child{color:var(--ink);text-align:right;max-width:60%;}
+
+  .insight{background:var(--panel);border:1px solid var(--hairline);border-radius:10px;padding:16px 18px;margin-bottom:12px;}
+  .insight h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-dim);margin:0 0 10px;font-weight:600;}
+  .fng-row{display:flex;align-items:center;gap:16px;}
+  .fng-num{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:700;}
+  .fng-bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--red),var(--yellow),var(--green));position:relative;}
+  .fng-marker{position:absolute;top:-4px;width:2px;height:16px;background:var(--ink);}
+  .fng-label{font-size:12px;color:var(--ink-dim);}
+
+  .ratio-line{font-family:'IBM Plex Mono',monospace;font-size:13px;display:flex;justify-content:space-between;padding:4px 0;}
+  .ratio-note{font-size:12px;color:var(--ink-dim);margin-top:8px;line-height:1.5;}
+
+  .method{font-size:12px;color:var(--ink-dim);line-height:1.6;}
+  .method b{color:var(--ink);}
+
+  .footer{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-dim);text-align:center;margin-top:20px;line-height:1.8;}
+
+  .loading{opacity:.4;filter:blur(1px);}
+  .err{color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:center;padding:20px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <h1>Marktampel — Live</h1>
+    <div class="sub" id="clock">—</div>
+  </div>
+
+  <div class="status-row">
+    <div><span class="dot" id="liveDot"></span><span id="statusText">Lade Daten…</span></div>
+    <div class="btns">
+      <button id="refreshBtn">Aktualisieren</button>
+      <button id="notifyBtn">🔔 Benachrichtigungen</button>
+    </div>
+  </div>
+
+  <div class="boards" id="boards">
+    <div class="board gold loading">
+      <div class="board-head"><div class="asset-name"><b>Gold</b></div></div>
+      <div class="ampel-housing"><div class="bulb"></div><div class="bulb"></div><div class="bulb"></div></div>
+      <div class="price">···</div>
+    </div>
+    <div class="board silver loading">
+      <div class="board-head"><div class="asset-name"><b>Silber</b></div></div>
+      <div class="ampel-housing"><div class="bulb"></div><div class="bulb"></div><div class="bulb"></div></div>
+      <div class="price">···</div>
+    </div>
+    <div class="board btc loading">
+      <div class="board-head"><div class="asset-name"><b>Bitcoin</b></div></div>
+      <div class="ampel-housing"><div class="bulb"></div><div class="bulb"></div><div class="bulb"></div></div>
+      <div class="price">···</div>
+    </div>
+  </div>
+
+  <div class="insight">
+    <h2>Fear & Greed Index — Bitcoin</h2>
+    <div class="fng-row">
+      <div class="fng-num" id="fngNum">—</div>
+      <div style="flex:1">
+        <div class="fng-bar"><div class="fng-marker" id="fngMarker" style="left:50%"></div></div>
+        <div class="fng-label" id="fngLabel">lädt…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="insight">
+    <h2>Gold/Silber-Ratio</h2>
+    <div class="ratio-line"><span>Aktuelle Ratio</span><span id="ratioVal">—</span></div>
+    <div class="ratio-note">Historisch galt eine Ratio über ~80 als Hinweis, dass Silber im Vergleich zu Gold günstig bewertet ist; unter ~50 als Hinweis auf ein teures Silber relativ zu Gold.</div>
+  </div>
+
+  <div class="insight">
+    <h2>Wie die Ampel berechnet wird</h2>
+    <div class="method">
+      <p><b>Bitcoin</b> kombiniert drei Indikatoren: Fear & Greed Index (&lt;25 = Extreme Angst → günstig), Mayer-Multiple (Kurs ÷ 200-Tage-Ø, &lt;1,0 = historische Akkumulationszone) und Abstand zum 200-Wochen-Durchschnitt (nahe/unter dieser Linie = historische Bodenzone).</p>
+      <p><b>Gold:</b> RSI(14) und Abstand zum 200-Tage-Durchschnitt (via PAX Gold, 1:1 an den LBMA-Goldpreis gekoppelt).</p>
+      <p><b>Silber:</b> Gold/Silber-Ratio — über 80 = Silber günstig, unter 50 = Silber teuer relativ zu Gold.</p>
+      <p style="margin-top:10px;color:var(--red)">Das ist keine Anlageberatung, sondern eine regelbasierte Auswertung öffentlich bekannter, häufig zitierter technischer Indikatoren. Sie sagt nichts über die Zukunft voraus.</p>
+    </div>
+  </div>
+
+  <div class="footer" id="footerNote">
+    Bitcoin- und Goldpreise (via PAX Gold) stammen von Binance; der Silberpreis von goldprice.org; Fear & Greed von alternative.me.<br>
+    Benachrichtigungen funktionieren nur, solange diese Seite in einem Browser-Tab/PWA geöffnet ist — echte Push bei geschlossener App braucht einen eigenen Server und ist hier nicht eingebaut.
+  </div>
+
+</div>
+
+<script>
+function fmtUSD(n, decimals){
+  return '$' + n.toLocaleString('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+}
+function sma(arr, period){
+  const slice = arr.slice(-period);
+  return slice.reduce((a,b)=>a+b,0) / slice.length;
+}
+function rsi(closes, period=14){
+  if(closes.length < period+1) return null;
+  let gains=0, losses=0;
+  const recent = closes.slice(-(period+1));
+  for(let i=1;i<recent.length;i++){
+    const diff = recent[i]-recent[i-1];
+    if(diff>=0) gains+=diff; else losses+=Math.abs(diff);
+  }
+  const avgGain = gains/period, avgLoss = losses/period;
+  if(avgLoss===0) return 100;
+  const rs = avgGain/avgLoss;
+  return 100 - (100/(1+rs));
+}
+async function fetchJSON(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return res.json();
+}
+
+async function loadBinanceDaily(symbol){
+  const priceRes = await fetchJSON(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+  const price = parseFloat(priceRes.price);
+  const klines = await fetchJSON(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1d&limit=210`);
+  const closes = klines.map(k=>parseFloat(k[4]));
+  const sma200 = sma(closes, 200);
+  const rsi14 = rsi(closes, 14);
+  return { price, sma200, rsi14 };
+}
+async function loadBinanceWeekly200(symbol){
+  const klines = await fetchJSON(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1w&limit=200`);
+  const closes = klines.map(k=>parseFloat(k[4]));
+  return sma(closes, 200);
+}
+async function loadSilverSpot(){
+  const data = await fetchJSON('https://data-asg.goldprice.org/dbXRates/USD');
+  return parseFloat(data.items[0].xagPrice);
+}
+async function loadFNG(){
+  const data = await fetchJSON('https://api.alternative.me/fng/?limit=1');
+  const item = data.data[0];
+  return { value: parseInt(item.value,10), label: item.value_classification };
+}
+
+function combine(levels){
+  if(levels.includes('red')) return 'red';
+  if(levels.every(l=>l==='green')) return 'green';
+  return 'yellow';
+}
+function ampelFromBTC(price, sma200, wma200, fngValue){
+  const mayer = price/sma200;
+  const mayerLevel = mayer < 1.0 ? 'green' : (mayer <= 2.0 ? 'yellow' : 'red');
+  const fngLevel = fngValue === null ? 'yellow' : (fngValue < 25 ? 'green' : (fngValue <= 55 ? 'yellow' : 'red'));
+  const wmaDistPct = ((price - wma200)/wma200)*100;
+  const wmaLevel = wmaDistPct < 10 ? 'green' : (wmaDistPct <= 30 ? 'yellow' : 'red');
+  return { level: combine([mayerLevel, fngLevel, wmaLevel]), mayer, wmaDistPct };
+}
+function ampelFromMetal(price, sma200, rsi14){
+  const distPct = ((price - sma200)/sma200)*100;
+  const distLevel = distPct < -2 ? 'green' : (distPct <= 3 ? 'yellow' : 'red');
+  const rsiLevel = rsi14 === null ? 'yellow' : (rsi14 < 30 ? 'green' : (rsi14 <= 70 ? 'yellow' : 'red'));
+  return { level: combine([distLevel, rsiLevel]), distPct };
+}
+function ampelFromRatio(ratio){
+  const level = ratio > 80 ? 'green' : (ratio >= 50 ? 'yellow' : 'red');
+  return { level, ratio };
+}
+
+function renderBoard(boardEl, assetLabel, price, level, metrics){
+  boardEl.classList.remove('loading');
+  const bulbs = level==='red' ? ['lit-red','',''] : level==='yellow' ? ['','lit-yellow',''] : ['','','lit-green'];
+  const verdictText = level==='green' ? 'Kaufsignal' : level==='yellow' ? 'Neutral / abwarten' : 'Überhitzt';
+  boardEl.innerHTML = `
+    <div class="board-head"><div class="asset-name"><b>${assetLabel}</b></div></div>
+    <div class="ampel-housing">
+      <div class="bulb ${bulbs[0]}"></div>
+      <div class="bulb ${bulbs[1]}"></div>
+      <div class="bulb ${bulbs[2]}"></div>
+    </div>
+    <div class="price">${fmtUSD(price, price>100?0:2)}</div>
+    <div class="verdict ${level}">${verdictText}</div>
+    <div class="metrics">${metrics}</div>
+  `;
+}
+function renderBoardError(boardEl, assetLabel){
+  boardEl.classList.remove('loading');
+  boardEl.innerHTML = `
+    <div class="board-head"><div class="asset-name"><b>${assetLabel}</b></div></div>
+    <div class="err">Daten momentan nicht erreichbar</div>
+  `;
+}
+
+async function refreshAll(){
+  document.getElementById('statusText').textContent = 'Lade Daten…';
+
+  const [goldR, silverR, btcR, btcWmaR, fngR] = await Promise.allSettled([
+    loadBinanceDaily('PAXGUSDT'),
+    loadSilverSpot(),
+    loadBinanceDaily('BTCUSDT'),
+    loadBinanceWeekly200('BTCUSDT'),
+    loadFNG()
+  ]);
+
+  const fng = fngR.status === 'fulfilled' ? fngR.value : null;
+  const statuses = {};
+
+  if(goldR.status === 'fulfilled'){
+    const gold = goldR.value;
+    const a = ampelFromMetal(gold.price, gold.sma200, gold.rsi14);
+    renderBoard(document.querySelector('.board.gold'), 'Gold', gold.price, a.level,
+      `<div class="metric-line"><span>RSI(14)</span><span>${gold.rsi14?.toFixed(1) ?? '–'}</span></div>
+       <div class="metric-line"><span>Abstand 200-Tage-Ø</span><span>${a.distPct.toFixed(1)}%</span></div>`);
+    statuses.gold = a.level;
+    window._lastGoldPrice = gold.price;
+  } else {
+    renderBoardError(document.querySelector('.board.gold'), 'Gold');
+  }
+
+  if(silverR.status === 'fulfilled' && window._lastGoldPrice){
+    const silverPrice = silverR.value;
+    const ratio = window._lastGoldPrice / silverPrice;
+    const a = ampelFromRatio(ratio);
+    renderBoard(document.querySelector('.board.silver'), 'Silber', silverPrice, a.level,
+      `<div class="metric-line"><span>Gold/Silber-Ratio</span><span>${ratio.toFixed(1)}</span></div>`);
+    statuses.silver = a.level;
+    document.getElementById('ratioVal').textContent = ratio.toFixed(1);
+  } else {
+    renderBoardError(document.querySelector('.board.silver'), 'Silber');
+  }
+
+  if(btcR.status === 'fulfilled' && btcWmaR.status === 'fulfilled'){
+    const btc = btcR.value;
+    const wma200 = btcWmaR.value;
+    const a = ampelFromBTC(btc.price, btc.sma200, wma200, fng ? fng.value : null);
+    renderBoard(document.querySelector('.board.btc'), 'Bitcoin', btc.price, a.level,
+      `<div class="metric-line"><span>Fear & Greed</span><span>${fng ? fng.value+' ('+fng.label+')' : '–'}</span></div>
+       <div class="metric-line"><span>Mayer-Multiple</span><span>${a.mayer.toFixed(2)}</span></div>
+       <div class="metric-line"><span>200-Wochen-Ø</span><span>${fmtUSD(wma200,0)} (${a.wmaDistPct.toFixed(0)}%)</span></div>`);
+    statuses.btc = a.level;
+  } else {
+    renderBoardError(document.querySelector('.board.btc'), 'Bitcoin');
+  }
+
+  if(fng){
+    document.getElementById('fngNum').textContent = fng.value;
+    document.getElementById('fngMarker').style.left = fng.value+'%';
+    document.getElementById('fngLabel').textContent = fng.label;
+  }
+
+  const anyOk = [goldR,silverR,btcR].some(r=>r.status==='fulfilled');
+  document.getElementById('statusText').textContent = anyOk
+    ? 'Live · zuletzt aktualisiert ' + new Date().toLocaleTimeString('de-DE')
+    : 'Fehler beim Laden — erneut versuchen';
+
+  if(Object.keys(statuses).length){
+    await checkStatusChange(statuses);
+  }
+}
+
+function checkStatusChange(current){
+  let stored = null;
+  try{
+    const raw = localStorage.getItem('ampel-status');
+    stored = raw ? JSON.parse(raw) : null;
+  } catch(e){ stored = null; }
+
+  if(stored){
+    const labels = {gold:'Gold', silver:'Silber', btc:'Bitcoin'};
+    for(const key of ['gold','silver','btc']){
+      if(stored[key] && stored[key] !== current[key]){
+        notify(`${labels[key]}: Ampel wechselte von ${stored[key]} zu ${current[key]}`);
+      }
+    }
+  }
+  try{ localStorage.setItem('ampel-status', JSON.stringify(current)); } catch(e){}
+}
+
+function notify(msg){
+  if('Notification' in window && Notification.permission === 'granted'){
+    new Notification('Marktampel', { body: msg });
+  }
+}
+
+document.getElementById('notifyBtn').addEventListener('click', async ()=>{
+  if(!('Notification' in window)){
+    alert('Benachrichtigungen werden von diesem Browser nicht unterstützt.');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  const btn = document.getElementById('notifyBtn');
+  if(perm === 'granted'){
+    btn.classList.add('on');
+    btn.textContent = '🔔 Aktiv (Tab/PWA offen halten)';
+    new Notification('Marktampel', { body: 'Benachrichtigungen sind aktiv, solange diese Seite geöffnet ist.' });
+  } else {
+    alert('Ohne Erlaubnis können keine Benachrichtigungen gesendet werden.');
+  }
+});
+
+document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+
+function updateClock(){
+  document.getElementById('clock').textContent = new Date().toLocaleString('de-DE');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+refreshAll();
+setInterval(refreshAll, 5*60*1000);
+</script>
+</body>
+</html>
