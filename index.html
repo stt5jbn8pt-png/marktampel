@@ -91,7 +91,18 @@
 
   .loading{opacity:.4;filter:blur(1px);}
   .err{color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:center;padding:20px;}
+
+  .chart-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .tab-btn{background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--hairline);border-radius:6px;padding:7px 12px;font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;}
+  .tab-btn.active{color:var(--ink);border-color:var(--ink-dim);}
+  .tab-btn.asset-active-gold{border-color:var(--gold);color:var(--gold);}
+  .tab-btn.asset-active-silver{border-color:var(--silver);color:var(--silver);}
+  .tab-btn.asset-active-btc{border-color:var(--btc);color:var(--btc);}
+  .chart-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+  .chart-wrap{position:relative;height:220px;}
+  .chart-note{font-size:11px;color:var(--ink-dim);text-align:center;margin-top:8px;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -128,6 +139,24 @@
   </div>
 
   <div class="insight">
+    <h2>Kursverlauf</h2>
+    <div class="chart-row">
+      <div class="chart-tabs" id="assetTabs">
+        <button class="tab-btn asset-active-gold active" data-asset="gold">Gold</button>
+        <button class="tab-btn" data-asset="silver">Silber</button>
+        <button class="tab-btn" data-asset="btc">Bitcoin</button>
+      </div>
+      <div class="chart-tabs" id="rangeTabs">
+        <button class="tab-btn" data-range="week">Woche</button>
+        <button class="tab-btn active" data-range="month">Monat</button>
+        <button class="tab-btn" data-range="year">Jahr</button>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
+    <div class="chart-note" id="chartNote">Lädt…</div>
+  </div>
+
+  <div class="insight">
     <h2>Fear & Greed Index — Bitcoin</h2>
     <div class="fng-row">
       <div class="fng-num" id="fngNum">—</div>
@@ -141,21 +170,22 @@
   <div class="insight">
     <h2>Gold/Silber-Ratio</h2>
     <div class="ratio-line"><span>Aktuelle Ratio</span><span id="ratioVal">—</span></div>
-    <div class="ratio-note">Historisch galt eine Ratio über ~80 als Hinweis, dass Silber im Vergleich zu Gold günstig bewertet ist; unter ~50 als Hinweis auf ein teures Silber relativ zu Gold.</div>
+    <div class="ratio-note">Historisch galt eine Ratio über ~80 als Hinweis, dass Silber im Vergleich zu Gold niedrig bewertet ist; unter ~50 als Hinweis auf eine hohe Bewertung von Silber relativ zu Gold.</div>
   </div>
 
   <div class="insight">
-    <h2>Wie die Ampel berechnet wird</h2>
+    <h2>Wie die Farben zustande kommen</h2>
     <div class="method">
-      <p><b>Bitcoin</b> kombiniert drei Indikatoren: Fear & Greed Index (&lt;25 = Extreme Angst → günstig), Mayer-Multiple (Kurs ÷ 200-Tage-Ø, &lt;1,0 = historische Akkumulationszone) und Abstand zum 200-Wochen-Durchschnitt (nahe/unter dieser Linie = historische Bodenzone).</p>
+      <p>Die Ampel zeigt eine reine <b>Bewertungseinschätzung</b>, keine Kauf- oder Verkaufsempfehlung: <span style="color:var(--green)">Grün = unterbewertet</span>, <span style="color:var(--yellow)">Gelb = fair bewertet</span>, <span style="color:var(--red)">Rot = hoch bewertet</span>.</p>
+      <p><b>Bitcoin</b> kombiniert drei Indikatoren: Fear & Greed Index (&lt;25 = Extreme Angst → tendenziell unterbewertet), Mayer-Multiple (Kurs ÷ 200-Tage-Ø, &lt;1,0 = historisch niedrig bewertet) und Abstand zum 200-Wochen-Durchschnitt (nahe/unter dieser Linie = historisch niedrig bewertete Zone).</p>
       <p><b>Gold:</b> RSI(14) und Abstand zum 200-Tage-Durchschnitt (via PAX Gold, 1:1 an den LBMA-Goldpreis gekoppelt).</p>
-      <p><b>Silber:</b> Gold/Silber-Ratio — über 80 = Silber günstig, unter 50 = Silber teuer relativ zu Gold.</p>
+      <p><b>Silber:</b> Gold/Silber-Ratio — über 80 = Silber im Vergleich zu Gold niedrig bewertet, unter 50 = hoch bewertet.</p>
       <p style="margin-top:10px;color:var(--red)">Das ist keine Anlageberatung, sondern eine regelbasierte Auswertung öffentlich bekannter, häufig zitierter technischer Indikatoren. Sie sagt nichts über die Zukunft voraus.</p>
     </div>
   </div>
 
   <div class="footer" id="footerNote">
-    Bitcoin- und Goldpreise (via PAX Gold) stammen von Binance; der Silberpreis von goldprice.org; Fear & Greed von alternative.me.<br>
+    Bitcoin- und Goldpreise (via PAX Gold) stammen von Binance; der Silberpreis von CoinGecko (Kinesis Silver)/goldprice.org; Fear & Greed von alternative.me. Kursverlauf: Binance (Gold, Bitcoin) und CoinGecko (Silber).<br>
     Benachrichtigungen funktionieren nur, solange diese Seite in einem Browser-Tab/PWA geöffnet ist — echte Push bei geschlossener App braucht einen eigenen Server und ist hier nicht eingebaut.
   </div>
 
@@ -191,11 +221,12 @@ async function fetchJSON(url){
 async function loadBinanceDaily(symbol){
   const priceRes = await fetchJSON(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
   const price = parseFloat(priceRes.price);
-  const klines = await fetchJSON(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1d&limit=210`);
+  const klines = await fetchJSON(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1d&limit=400`);
   const closes = klines.map(k=>parseFloat(k[4]));
+  const times = klines.map(k=>k[0]);
   const sma200 = sma(closes, 200);
   const rsi14 = rsi(closes, 14);
-  return { price, sma200, rsi14 };
+  return { price, sma200, rsi14, closes, times };
 }
 async function loadBinanceWeekly200(symbol){
   const klines = await fetchJSON(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1w&limit=200`);
@@ -207,16 +238,17 @@ async function loadSilverSpot(){
   // kann eine einzelne Quelle CORS blockieren, daher hier eine Fallback-Kette.
   const sources = [
     async () => {
+      // Kinesis Silver (KAG), ein an den Silber-Spotpreis gekoppeltes Token
+      const data = await fetchJSON('https://api.coingecko.com/api/v3/simple/price?ids=kinesis-silver&vs_currencies=usd');
+      return parseFloat(data['kinesis-silver'].usd);
+    },
+    async () => {
       const data = await fetchJSON('https://data-asg.goldprice.org/dbXRates/USD');
       return parseFloat(data.items[0].xagPrice);
     },
     async () => {
       const data = await fetchJSON('https://api.gold-api.com/price/XAG');
       return parseFloat(data.price);
-    },
-    async () => {
-      const data = await fetchJSON('https://www.freeforexapi.com/api/live?pairs=XAGUSD');
-      return parseFloat(data.rates.XAGUSD.rate);
     }
   ];
   let lastErr = null;
@@ -232,6 +264,10 @@ async function loadFNG(){
   const data = await fetchJSON('https://api.alternative.me/fng/?limit=1');
   const item = data.data[0];
   return { value: parseInt(item.value,10), label: item.value_classification };
+}
+async function loadSilverHistory(){
+  const data = await fetchJSON('https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=365');
+  return { times: data.prices.map(p=>p[0]), closes: data.prices.map(p=>p[1]) };
 }
 
 function combine(levels){
@@ -261,7 +297,7 @@ function ampelFromRatio(ratio){
 function renderBoard(boardEl, assetLabel, price, level, metrics){
   boardEl.classList.remove('loading');
   const bulbs = level==='red' ? ['lit-red','',''] : level==='yellow' ? ['','lit-yellow',''] : ['','','lit-green'];
-  const verdictText = level==='green' ? 'Kaufsignal' : level==='yellow' ? 'Neutral / abwarten' : 'Überhitzt';
+  const verdictText = level==='green' ? 'Unterbewertet' : level==='yellow' ? 'Fair bewertet' : 'Hoch bewertet';
   boardEl.innerHTML = `
     <div class="board-head"><div class="asset-name"><b>${assetLabel}</b></div></div>
     <div class="ampel-housing">
@@ -285,13 +321,19 @@ function renderBoardError(boardEl, assetLabel){
 async function refreshAll(){
   document.getElementById('statusText').textContent = 'Lade Daten…';
 
-  const [goldR, silverR, btcR, btcWmaR, fngR] = await Promise.allSettled([
+  const [goldR, silverR, btcR, btcWmaR, fngR, silverHistR] = await Promise.allSettled([
     loadBinanceDaily('PAXGUSDT'),
     loadSilverSpot(),
     loadBinanceDaily('BTCUSDT'),
     loadBinanceWeekly200('BTCUSDT'),
-    loadFNG()
+    loadFNG(),
+    loadSilverHistory()
   ]);
+
+  window._history = window._history || {};
+  if(goldR.status === 'fulfilled') window._history.gold = { times: goldR.value.times, closes: goldR.value.closes };
+  if(btcR.status === 'fulfilled') window._history.btc = { times: btcR.value.times, closes: btcR.value.closes };
+  if(silverHistR.status === 'fulfilled') window._history.silver = silverHistR.value;
 
   const fng = fngR.status === 'fulfilled' ? fngR.value : null;
   const statuses = {};
@@ -343,6 +385,8 @@ async function refreshAll(){
   document.getElementById('statusText').textContent = anyOk
     ? 'Live · zuletzt aktualisiert ' + new Date().toLocaleTimeString('de-DE')
     : 'Fehler beim Laden — erneut versuchen';
+
+  renderChart();
 
   if(Object.keys(statuses).length){
     await checkStatusChange(statuses);
@@ -396,6 +440,75 @@ function updateClock(){
 }
 setInterval(updateClock, 1000);
 updateClock();
+
+// --- Kursverlauf-Chart ---
+window._chartState = { asset: 'gold', range: 'month' };
+window._chartInstance = null;
+const ASSET_COLORS = { gold: '#C9A227', silver: '#AEB7C1', btc: '#F7931A' };
+const ASSET_LABELS = { gold: 'Gold', silver: 'Silber', btc: 'Bitcoin' };
+const RANGE_DAYS = { week: 7, month: 30, year: 365 };
+
+function renderChart(){
+  const { asset, range } = window._chartState;
+  const hist = (window._history || {})[asset];
+  const canvas = document.getElementById('priceChart');
+  const noteEl = document.getElementById('chartNote');
+  if(!hist || !hist.closes || !hist.closes.length){
+    if(window._chartInstance){ window._chartInstance.destroy(); window._chartInstance = null; }
+    noteEl.textContent = 'Für ' + ASSET_LABELS[asset] + ' liegt aktuell keine Kurshistorie vor.';
+    return;
+  }
+  const days = RANGE_DAYS[range];
+  const n = Math.min(days, hist.closes.length);
+  const closes = hist.closes.slice(-n);
+  const times = hist.times.slice(-n);
+  const labels = times.map(t => new Date(t).toLocaleDateString('de-DE', range==='year' ? {month:'short', year:'2-digit'} : {day:'2-digit', month:'2-digit'}));
+
+  if(window._chartInstance) window._chartInstance.destroy();
+  const ctx = canvas.getContext('2d');
+  window._chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: closes,
+        borderColor: ASSET_COLORS[asset],
+        backgroundColor: ASSET_COLORS[asset] + '22',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.15
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8A96A3', maxTicksLimit: 6, font: {family:'IBM Plex Mono', size:10} }, grid: { color: '#232B35' } },
+        y: { ticks: { color: '#8A96A3', font: {family:'IBM Plex Mono', size:10} }, grid: { color: '#232B35' } }
+      }
+    }
+  });
+  noteEl.textContent = ASSET_LABELS[asset] + ' · letzte ' + (range==='week' ? '7 Tage' : range==='month' ? '30 Tage' : 'bis zu 12 Monate');
+}
+
+document.getElementById('assetTabs').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.tab-btn');
+  if(!btn) return;
+  document.querySelectorAll('#assetTabs .tab-btn').forEach(b=>b.classList.remove('active','asset-active-gold','asset-active-silver','asset-active-btc'));
+  btn.classList.add('active', 'asset-active-'+btn.dataset.asset);
+  window._chartState.asset = btn.dataset.asset;
+  renderChart();
+});
+document.getElementById('rangeTabs').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.tab-btn');
+  if(!btn) return;
+  document.querySelectorAll('#rangeTabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  window._chartState.range = btn.dataset.range;
+  renderChart();
+});
 
 refreshAll();
 setInterval(refreshAll, 5*60*1000);
