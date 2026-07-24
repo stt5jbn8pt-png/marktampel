@@ -698,10 +698,12 @@ function startApp(){
 }
 
 // Kein echter Schutz (der Code steht im Klartext im Client-Code) — nur eine Hürde gegen zufällige
-// Seitenbesucher. Bei richtigem Code merkt sich der Browser die Freischaltung dauerhaft.
+// Seitenbesucher. Die Freischaltung gilt bewusst nur für die aktuelle Seitenladung (keine Persistenz
+// in localStorage/sessionStorage): bei jedem echten Neuladen/Neuaufruf der Seite wird der Code wieder
+// verlangt. Der "Aktualisieren"-Button lädt die Seite nicht neu, sondern ruft nur refreshAll() auf —
+// dabei bleibt man freigeschaltet.
 const LOCK_CODE = '21';
 function unlockApp(){
-  try{ localStorage.setItem('ampel-unlocked', 'true'); } catch(e){}
   document.getElementById('lockOverlay').style.display = 'none';
   startApp();
 }
@@ -723,14 +725,8 @@ function tryUnlock(){
 document.getElementById('lockBtn').addEventListener('click', tryUnlock);
 document.getElementById('lockInput').addEventListener('keydown', e => { if(e.key === 'Enter') tryUnlock(); });
 
-let alreadyUnlocked = false;
-try{ alreadyUnlocked = localStorage.getItem('ampel-unlocked') === 'true'; } catch(e){}
-if(alreadyUnlocked){
-  startApp();
-} else {
-  document.getElementById('lockOverlay').style.display = 'flex';
-  document.getElementById('lockInput').focus();
-}
+document.getElementById('lockOverlay').style.display = 'flex';
+document.getElementById('lockInput').focus();
 </script>
 </body>
 </html>
