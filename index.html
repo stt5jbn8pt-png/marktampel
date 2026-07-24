@@ -203,10 +203,16 @@ function rsi(closes, period=14){
   const rs = avgGain/avgLoss;
   return 100 - (100/(1+rs));
 }
-async function fetchJSON(url){
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  return res.json();
+async function fetchJSON(url, timeoutMs=10000){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), timeoutMs);
+  try{
+    const res = await fetch(url, { signal: controller.signal });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Bitcoin & Gold (via PAX Gold) laufen primär über Binance — Preis, Indikatoren UND prozentuale Veränderungen in einem Rutsch.
@@ -332,7 +338,7 @@ async function fetchViaCorsProxy(targetUrl){
   throw lastErr || new Error('Kein CORS-Proxy erreichbar');
 }
 async function loadYahooEtfAsset(symbol){
-  const target = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=2y&interval=1d`;
+  const target = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1y&interval=1d`;
   const data = await fetchViaCorsProxy(target);
   const result = data.chart.result[0];
   const meta = result.meta;
@@ -403,7 +409,7 @@ function renderBoard(boardEl, assetLabel, price, level, metrics, opts){
   boardEl.classList.toggle('stale', !!opts.stale);
   const bulbs = level==='red' ? ['lit-red','',''] : level==='yellow' ? ['','lit-yellow',''] : ['','','lit-green'];
   const verdictText = verdictLabel(level);
-  const staleNote = opts.stale ? `<div class="stale-note">Zwischengespeichert · ${opts.staleAge}</div>` : '';
+  const staleNote = opts.note ? `<div class="stale-note">${opts.note}</div>` : '';
   boardEl.innerHTML = `
     <div class="board-head"><div class="asset-name"><b>${assetLabel}</b></div></div>
     <div class="ampel-housing" role="img" aria-label="Bewertungsampel ${assetLabel}: ${verdictText}">
@@ -448,10 +454,23 @@ function ageLabel(ts){
 function renderFromCacheOrError(boardEl, assetLabel, key){
   const cached = readCachedBoard(key);
   if(cached){
-    renderBoard(boardEl, assetLabel, cached.price, cached.level, cached.metrics, { stale: true, staleAge: ageLabel(cached.ts) });
+    renderBoard(boardEl, assetLabel, cached.price, cached.level, cached.metrics, { stale: true, note: `Zwischengespeichert · ${ageLabel(cached.ts)}` });
   } else {
     renderBoardError(boardEl, assetLabel);
   }
+  return cached;
+}
+// Kupfer/Uran basieren auf Tagesdaten (RSI/SMA200) und ändern sich nicht im 5-Minuten-Takt; um den
+// langsameren öffentlichen CORS-Proxy nicht bei jedem Refresh zu belasten, wird dort nur stündlich
+// neu geladen und dazwischen der Cache gezeigt (ohne Netzwerk-Request, ohne "Fehler"-Optik).
+const COMMODITY_TTL_MS = 60*60*1000;
+function isCommodityCacheFresh(key){
+  const cached = readCachedBoard(key);
+  return !!(cached && (Date.now()-cached.ts) < COMMODITY_TTL_MS);
+}
+function renderFromFreshCache(boardEl, assetLabel, key){
+  const cached = readCachedBoard(key);
+  renderBoard(boardEl, assetLabel, cached.price, cached.level, cached.metrics, { stale: false, note: `Aktualisiert ${ageLabel(cached.ts)} · Update stündlich` });
   return cached;
 }
 
@@ -470,14 +489,17 @@ function renderChangeRow(label, changes){
 async function refreshAll(){
   document.getElementById('statusText').textContent = 'Lade Daten…';
 
+  const copperFresh = isCommodityCacheFresh('copper');
+  const uraniumFresh = isCommodityCacheFresh('uranium');
+
   const [goldR, silverSpotR, btcR, btcWmaR, fngR, copperR, uraniumR] = await Promise.allSettled([
     loadCryptoAsset('PAXGUSDT', 'pax-gold'),
     loadSilverSpot(),
     loadCryptoAsset('BTCUSDT', 'bitcoin'),
     loadWeekly200('BTCUSDT', 'bitcoin'),
     loadFNG(),
-    loadYahooEtfAsset('COPX'),
-    loadYahooEtfAsset('URA')
+    copperFresh ? Promise.resolve(null) : loadYahooEtfAsset('COPX'),
+    uraniumFresh ? Promise.resolve(null) : loadYahooEtfAsset('URA')
   ]);
 
   const fng = fngR.status === 'fulfilled' ? fngR.value : null;
@@ -535,7 +557,10 @@ async function refreshAll(){
     if(cached){ statuses.btc = cached.level; changeRows.btc = cached.changes ?? null; }
   }
 
-  if(copperR.status === 'fulfilled'){
+  if(copperFresh){
+    const cached = renderFromFreshCache(document.querySelector('.board.copper'), 'Kupfer', 'copper');
+    if(cached){ statuses.copper = cached.level; changeRows.copper = cached.changes ?? null; }
+  } else if(copperR.status === 'fulfilled'){
     const copper = copperR.value;
     const a = ampelFromMetal(copper.price, copper.sma200, copper.rsi14);
     const metricsHtml = `<div class="metric-line"><span>RSI(14)</span><span>${copper.rsi14?.toFixed(1) ?? '–'}</span></div>
@@ -550,7 +575,10 @@ async function refreshAll(){
     if(cached){ statuses.copper = cached.level; changeRows.copper = cached.changes ?? null; }
   }
 
-  if(uraniumR.status === 'fulfilled'){
+  if(uraniumFresh){
+    const cached = renderFromFreshCache(document.querySelector('.board.uranium'), 'Uran', 'uranium');
+    if(cached){ statuses.uranium = cached.level; changeRows.uranium = cached.changes ?? null; }
+  } else if(uraniumR.status === 'fulfilled'){
     const uranium = uraniumR.value;
     const a = ampelFromMetal(uranium.price, uranium.sma200, uranium.rsi14);
     const metricsHtml = `<div class="metric-line"><span>RSI(14)</span><span>${uranium.rsi14?.toFixed(1) ?? '–'}</span></div>
