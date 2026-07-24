@@ -433,14 +433,19 @@ function renderBoardError(boardEl, assetLabel){
 }
 
 // Zwischenspeicher: wenn alle Quellen für ein Asset ausfallen, zeigen wir den letzten bekannten Stand
-// statt einer reinen Fehlermeldung.
+// statt einer reinen Fehlermeldung. CACHE_SCHEMA_VERSION erhöhen, sobald sich die Berechnungslogik
+// ändert — sonst zeigt die stündliche Kupfer/Uran-Cache-Sperre nach einem Bugfix noch bis zu eine
+// Stunde lang die alten (falschen) Werte, statt sie neu zu laden.
+const CACHE_SCHEMA_VERSION = 2;
 function cacheBoard(key, payload){
-  try{ localStorage.setItem('ampel-cache-'+key, JSON.stringify({ ...payload, ts: Date.now() })); } catch(e){}
+  try{ localStorage.setItem('ampel-cache-'+key, JSON.stringify({ ...payload, ts: Date.now(), schema: CACHE_SCHEMA_VERSION })); } catch(e){}
 }
 function readCachedBoard(key){
   try{
     const raw = localStorage.getItem('ampel-cache-'+key);
-    return raw ? JSON.parse(raw) : null;
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed.schema === CACHE_SCHEMA_VERSION ? parsed : null;
   } catch(e){ return null; }
 }
 function ageLabel(ts){
