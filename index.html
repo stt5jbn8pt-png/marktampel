@@ -337,18 +337,20 @@ async function loadYahooEtfAsset(symbol){
   const result = data.chart.result[0];
   const meta = result.meta;
   const price = meta.regularMarketPrice;
-  const prevClose = meta.previousClose ?? meta.chartPreviousClose;
-  const dayChange = prevClose ? ((price-prevClose)/prevClose)*100 : null;
+  // Nur Handelstage in der Reihe (keine Wochenenden) — Offsets als Handelstage, nicht Kalendertage.
+  // meta.previousClose/chartPreviousClose bewusst NICHT genutzt: chartPreviousClose bezieht sich auf
+  // den Schlusskurs vom Anfang des angefragten Zeitfensters (hier: vor ~2 Jahren), nicht auf gestern.
   const closes = result.indicators.quote[0].close.filter(c => c !== null && c !== undefined);
-  const weekAgo = closes[Math.max(0, closes.length-8)];
-  const yearAgo = closes[0];
+  const dayAgo = closes[Math.max(0, closes.length-2)];
+  const weekAgo = closes[Math.max(0, closes.length-6)];
+  const yearAgo = closes[Math.max(0, closes.length-253)];
   return {
     price,
     sma200: sma(closes, 200),
     rsi14: rsi(closes, 14),
     changes: {
       hour: null,
-      day: dayChange,
+      day: dayAgo ? ((price-dayAgo)/dayAgo)*100 : null,
       week: weekAgo ? ((price-weekAgo)/weekAgo)*100 : null,
       year: yearAgo ? ((price-yearAgo)/yearAgo)*100 : null
     }
