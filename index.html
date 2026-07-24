@@ -85,10 +85,32 @@
   .chg-pos{color:var(--green);}
   .chg-neg{color:var(--red);}
   .chg-na{color:var(--ink-dim);}
+
+  .lock-overlay{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .lock-card{background:var(--panel);border:1px solid var(--hairline);border-radius:10px;padding:28px 24px;max-width:280px;width:100%;text-align:center;}
+  .lock-card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-dim);margin:0 0 16px;font-weight:600;}
+  .lock-card input{width:100%;background:var(--panel-2);color:var(--ink);border:1px solid var(--hairline);border-radius:6px;padding:10px 12px;font-family:'IBM Plex Mono',monospace;font-size:16px;text-align:center;letter-spacing:.15em;margin-bottom:10px;}
+  .lock-card input:focus{outline:none;border-color:var(--ink-dim);}
+  .lock-card button{width:100%;background:var(--panel-2);color:var(--ink);border:1px solid var(--hairline);border-radius:6px;padding:10px 12px;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;letter-spacing:.03em;}
+  .lock-card button:hover{border-color:var(--ink-dim);}
+  .lock-error{color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:10px;min-height:14px;}
+  .lock-card.shake{animation:shake .3s;}
+  @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}
+  .wrap.hidden{display:none;}
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div class="lock-overlay" id="lockOverlay" style="display:none">
+  <div class="lock-card" id="lockCard">
+    <h2>Code eingeben</h2>
+    <input type="password" inputmode="numeric" pattern="[0-9]*" id="lockInput" autocomplete="off" maxlength="8">
+    <button id="lockBtn">Freischalten</button>
+    <div class="lock-error" id="lockError"></div>
+  </div>
+</div>
+
+<div class="wrap hidden" id="app">
 
   <div class="masthead">
     <h1>Marktampel — Live</h1>
@@ -666,11 +688,49 @@ document.getElementById('refreshBtn').addEventListener('click', refreshAll);
 function updateClock(){
   document.getElementById('clock').textContent = new Date().toLocaleString('de-DE');
 }
-setInterval(updateClock, 1000);
-updateClock();
 
-refreshAll();
-setInterval(refreshAll, 5*60*1000);
+function startApp(){
+  document.getElementById('app').classList.remove('hidden');
+  setInterval(updateClock, 1000);
+  updateClock();
+  refreshAll();
+  setInterval(refreshAll, 5*60*1000);
+}
+
+// Kein echter Schutz (der Code steht im Klartext im Client-Code) — nur eine Hürde gegen zufällige
+// Seitenbesucher. Bei richtigem Code merkt sich der Browser die Freischaltung dauerhaft.
+const LOCK_CODE = '21';
+function unlockApp(){
+  try{ localStorage.setItem('ampel-unlocked', 'true'); } catch(e){}
+  document.getElementById('lockOverlay').style.display = 'none';
+  startApp();
+}
+function tryUnlock(){
+  const input = document.getElementById('lockInput');
+  const card = document.getElementById('lockCard');
+  const errorEl = document.getElementById('lockError');
+  if(input.value === LOCK_CODE){
+    unlockApp();
+  } else {
+    errorEl.textContent = 'Falscher Code';
+    card.classList.remove('shake');
+    void card.offsetWidth;
+    card.classList.add('shake');
+    input.value = '';
+    input.focus();
+  }
+}
+document.getElementById('lockBtn').addEventListener('click', tryUnlock);
+document.getElementById('lockInput').addEventListener('keydown', e => { if(e.key === 'Enter') tryUnlock(); });
+
+let alreadyUnlocked = false;
+try{ alreadyUnlocked = localStorage.getItem('ampel-unlocked') === 'true'; } catch(e){}
+if(alreadyUnlocked){
+  startApp();
+} else {
+  document.getElementById('lockOverlay').style.display = 'flex';
+  document.getElementById('lockInput').focus();
+}
 </script>
 </body>
 </html>
