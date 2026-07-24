@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Marktampel — Gold · Silber · Bitcoin (Live)</title>
+<meta name="description" content="Live-Bewertungsampel für Gold, Silber und Bitcoin: RSI, gleitende Durchschnitte, Fear & Greed Index und Gold/Silber-Ratio in einem regelbasierten Ampel-Dashboard.">
+<meta property="og:title" content="Marktampel — Gold · Silber · Bitcoin (Live)">
+<meta property="og:description" content="Regelbasierte Live-Bewertungsampel für Gold, Silber und Bitcoin — keine Anlageberatung.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230B0F14'/%3E%3Ccircle cx='50' cy='28' r='14' fill='%23E5484D'/%3E%3Ccircle cx='50' cy='54' r='14' fill='%23F5C744'/%3E%3Ccircle cx='50' cy='80' r='14' fill='%233DDC84'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -66,6 +71,9 @@
   .footer{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-dim);text-align:center;margin-top:20px;line-height:1.8;}
   .loading{opacity:.4;filter:blur(1px);}
   .err{color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:center;padding:20px;}
+  .stale-note{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-dim);text-align:center;margin:-6px 0 10px;letter-spacing:.03em;}
+  .board.stale{opacity:.78;}
+  .board.stale::before{opacity:.5;}
 
   .change-table{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:12px;}
   .change-table th{text-align:right;color:var(--ink-dim);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:4px 6px;}
@@ -144,9 +152,10 @@
     <h2>Wie die Farben zustande kommen</h2>
     <div class="method">
       <p>Die Ampel zeigt eine reine <b>Bewertungseinschätzung</b>, keine Kauf- oder Verkaufsempfehlung: <span style="color:var(--green)">Grün = unterbewertet</span>, <span style="color:var(--yellow)">Gelb = fair bewertet</span>, <span style="color:var(--red)">Rot = hoch bewertet</span>.</p>
-      <p><b>Bitcoin</b> kombiniert drei Indikatoren: Fear & Greed Index (&lt;25 = Extreme Angst → tendenziell unterbewertet), Mayer-Multiple (Kurs ÷ 200-Tage-Ø, &lt;1,0 = historisch niedrig bewertet) und Abstand zum 200-Wochen-Durchschnitt (nahe/unter dieser Linie = historisch niedrig bewertete Zone).</p>
+      <p><b>Bitcoin</b> kombiniert vier Indikatoren: Fear & Greed Index (&lt;25 = Extreme Angst → tendenziell unterbewertet), Mayer-Multiple (Kurs ÷ 200-Tage-Ø, &lt;1,0 = historisch niedrig bewertet), Abstand zum 200-Wochen-Durchschnitt (nahe/unter dieser Linie = historisch niedrig bewertete Zone) und RSI(14) (&lt;30 = überverkauft).</p>
       <p><b>Gold:</b> RSI(14) und Abstand zum 200-Tage-Durchschnitt (via PAX Gold, 1:1 an den LBMA-Goldpreis gekoppelt).</p>
-      <p><b>Silber:</b> Gold/Silber-Ratio — über 80 = Silber im Vergleich zu Gold niedrig bewertet, unter 50 = hoch bewertet.</p>
+      <p><b>Silber:</b> Gold/Silber-Ratio (über 80 = Silber im Vergleich zu Gold niedrig bewertet, unter 50 = hoch bewertet) kombiniert mit RSI(14) und Abstand zum eigenen 200-Tage-Durchschnitt — derselbe Maßstab wie bei Gold, damit Silber nicht allein am Ratio hängt.</p>
+      <p style="margin-top:10px">Ist eine Quelle vorübergehend nicht erreichbar (z.B. regionale Sperren bei Binance), wird automatisch auf eine Alternativquelle (CoinGecko) ausgewichen; schlägt auch das fehl, zeigt die Ampel den letzten bekannten Stand als "Zwischengespeichert" an.</p>
       <p style="margin-top:10px;color:var(--red)">Das ist keine Anlageberatung, sondern eine regelbasierte Auswertung öffentlich bekannter, häufig zitierter technischer Indikatoren. Sie sagt nichts über die Zukunft voraus.</p>
     </div>
   </div>
@@ -185,7 +194,7 @@ async function fetchJSON(url){
   return res.json();
 }
 
-// Bitcoin & Gold (via PAX Gold) laufen über Binance — Preis, Indikatoren UND prozentuale Veränderungen in einem Rutsch.
+// Bitcoin & Gold (via PAX Gold) laufen primär über Binance — Preis, Indikatoren UND prozentuale Veränderungen in einem Rutsch.
 async function loadBinanceAsset(symbol){
   const [ticker24, hourlyKlines, dailyKlines] = await Promise.all([
     fetchJSON(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`),
@@ -211,7 +220,45 @@ async function loadBinanceWeekly200(symbol){
   return sma(closes, 200);
 }
 
-// Silber: aktueller Preis über Fallback-Kette; Woche/Jahr-Veränderung über CoinGecko-Historie (best effort).
+// CoinGecko-Fallback für BTC/Gold, falls Binance nicht erreichbar ist (z.B. Geoblocking in manchen Regionen).
+async function loadCoingeckoAsset(id){
+  const [priceData, chartData] = await Promise.all([
+    fetchJSON(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true`),
+    fetchJSON(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=365&interval=daily`)
+  ]);
+  const price = priceData[id].usd;
+  const dayChange = priceData[id].usd_24h_change;
+  const closes = chartData.prices.map(p=>p[1]);
+  const weekAgo = closes[Math.max(0, closes.length-8)];
+  const yearAgo = closes[0];
+  return {
+    price,
+    sma200: sma(closes, 200),
+    rsi14: rsi(closes, 14),
+    changes: {
+      hour: null,
+      day: (typeof dayChange === 'number') ? dayChange : null,
+      week: ((price-weekAgo)/weekAgo)*100,
+      year: ((price-yearAgo)/yearAgo)*100
+    }
+  };
+}
+async function loadCoingeckoWeekly200(id){
+  const chartData = await fetchJSON(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=1460&interval=daily`);
+  const dailyCloses = chartData.prices.map(p=>p[1]);
+  const weeklyCloses = dailyCloses.filter((_,i)=> i % 7 === 0);
+  return sma(weeklyCloses, 200);
+}
+async function loadCryptoAsset(symbol, coingeckoId){
+  try{ return await loadBinanceAsset(symbol); }
+  catch(e){ return await loadCoingeckoAsset(coingeckoId); }
+}
+async function loadWeekly200(symbol, coingeckoId){
+  try{ return await loadBinanceWeekly200(symbol); }
+  catch(e){ return await loadCoingeckoWeekly200(coingeckoId); }
+}
+
+// Silber: aktueller Preis über Fallback-Kette; RSI/SMA200/Veränderungen über CoinGecko-Historie.
 async function loadSilverSpot(){
   const sources = [
     async () => {
@@ -236,17 +283,21 @@ async function loadSilverSpot(){
   }
   throw lastErr || new Error('Keine Silber-Quelle erreichbar');
 }
-async function loadSilverChanges(currentPrice){
-  const data = await fetchJSON('https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=365');
+async function loadSilverHistory(currentPrice){
+  const data = await fetchJSON('https://api.coingecko.com/api/v3/coins/kinesis-silver/market_chart?vs_currency=usd&days=365&interval=daily');
   const closes = data.prices.map(p=>p[1]);
   const dayAgo = closes[Math.max(0, closes.length-2)];
   const weekAgo = closes[Math.max(0, closes.length-8)];
   const yearAgo = closes[0];
   return {
-    hour: null,
-    day: ((currentPrice-dayAgo)/dayAgo)*100,
-    week: ((currentPrice-weekAgo)/weekAgo)*100,
-    year: ((currentPrice-yearAgo)/yearAgo)*100
+    sma200: sma(closes, 200),
+    rsi14: rsi(closes, 14),
+    changes: {
+      hour: null,
+      day: ((currentPrice-dayAgo)/dayAgo)*100,
+      week: ((currentPrice-weekAgo)/weekAgo)*100,
+      year: ((currentPrice-yearAgo)/yearAgo)*100
+    }
   };
 }
 
@@ -261,13 +312,15 @@ function combine(levels){
   if(levels.every(l=>l==='green')) return 'green';
   return 'yellow';
 }
-function ampelFromBTC(price, sma200, wma200, fngValue){
+// BTC: Mayer-Multiple, Fear & Greed, 200-Wochen-Ø und zusätzlich RSI(14) (gleicher Maßstab wie bei den Metallen).
+function ampelFromBTC(price, sma200, wma200, rsi14, fngValue){
   const mayer = price/sma200;
   const mayerLevel = mayer < 1.0 ? 'green' : (mayer <= 2.0 ? 'yellow' : 'red');
   const fngLevel = fngValue === null ? 'yellow' : (fngValue < 25 ? 'green' : (fngValue <= 55 ? 'yellow' : 'red'));
   const wmaDistPct = ((price - wma200)/wma200)*100;
   const wmaLevel = wmaDistPct < 10 ? 'green' : (wmaDistPct <= 30 ? 'yellow' : 'red');
-  return { level: combine([mayerLevel, fngLevel, wmaLevel]), mayer, wmaDistPct };
+  const rsiLevel = rsi14 === null ? 'yellow' : (rsi14 < 30 ? 'green' : (rsi14 <= 70 ? 'yellow' : 'red'));
+  return { level: combine([mayerLevel, fngLevel, wmaLevel, rsiLevel]), mayer, wmaDistPct };
 }
 function ampelFromMetal(price, sma200, rsi14){
   const distPct = ((price - sma200)/sma200)*100;
@@ -275,33 +328,75 @@ function ampelFromMetal(price, sma200, rsi14){
   const rsiLevel = rsi14 === null ? 'yellow' : (rsi14 < 30 ? 'green' : (rsi14 <= 70 ? 'yellow' : 'red'));
   return { level: combine([distLevel, rsiLevel]), distPct };
 }
-function ampelFromRatio(ratio){
-  const level = ratio > 80 ? 'green' : (ratio >= 50 ? 'yellow' : 'red');
-  return { level, ratio };
+// Silber: bislang nur das Gold/Silber-Ratio — jetzt zusätzlich RSI(14) und Abstand zum 200-Tage-Ø,
+// damit Silber nach demselben Maßstab wie Gold/BTC bewertet wird statt nach einem Einzelindikator.
+function ampelFromSilver(price, sma200, rsi14, ratio){
+  const distPct = sma200 ? ((price - sma200)/sma200)*100 : null;
+  const distLevel = distPct === null ? 'yellow' : (distPct < -2 ? 'green' : (distPct <= 3 ? 'yellow' : 'red'));
+  const rsiLevel = rsi14 === null ? 'yellow' : (rsi14 < 30 ? 'green' : (rsi14 <= 70 ? 'yellow' : 'red'));
+  const ratioLevel = ratio > 80 ? 'green' : (ratio >= 50 ? 'yellow' : 'red');
+  return { level: combine([ratioLevel, distLevel, rsiLevel]), distPct, ratio };
 }
 
-function renderBoard(boardEl, assetLabel, price, level, metrics){
+function verdictLabel(level){
+  return level==='green' ? 'Unterbewertet' : level==='yellow' ? 'Fair bewertet' : 'Hoch bewertet';
+}
+function renderBoard(boardEl, assetLabel, price, level, metrics, opts){
+  opts = opts || {};
   boardEl.classList.remove('loading');
+  boardEl.classList.toggle('stale', !!opts.stale);
   const bulbs = level==='red' ? ['lit-red','',''] : level==='yellow' ? ['','lit-yellow',''] : ['','','lit-green'];
-  const verdictText = level==='green' ? 'Unterbewertet' : level==='yellow' ? 'Fair bewertet' : 'Hoch bewertet';
+  const verdictText = verdictLabel(level);
+  const staleNote = opts.stale ? `<div class="stale-note">Zwischengespeichert · ${opts.staleAge}</div>` : '';
   boardEl.innerHTML = `
     <div class="board-head"><div class="asset-name"><b>${assetLabel}</b></div></div>
-    <div class="ampel-housing">
+    <div class="ampel-housing" role="img" aria-label="Bewertungsampel ${assetLabel}: ${verdictText}">
       <div class="bulb ${bulbs[0]}"></div>
       <div class="bulb ${bulbs[1]}"></div>
       <div class="bulb ${bulbs[2]}"></div>
     </div>
     <div class="price">${fmtUSD(price, price>100?0:2)}</div>
-    <div class="verdict ${level}">${verdictText}</div>
+    <div class="verdict ${level}" role="status">${verdictText}</div>
+    ${staleNote}
     <div class="metrics">${metrics}</div>
   `;
 }
 function renderBoardError(boardEl, assetLabel){
   boardEl.classList.remove('loading');
+  boardEl.classList.remove('stale');
   boardEl.innerHTML = `
     <div class="board-head"><div class="asset-name"><b>${assetLabel}</b></div></div>
     <div class="err">Daten momentan nicht erreichbar</div>
   `;
+}
+
+// Zwischenspeicher: wenn alle Quellen für ein Asset ausfallen, zeigen wir den letzten bekannten Stand
+// statt einer reinen Fehlermeldung.
+function cacheBoard(key, payload){
+  try{ localStorage.setItem('ampel-cache-'+key, JSON.stringify({ ...payload, ts: Date.now() })); } catch(e){}
+}
+function readCachedBoard(key){
+  try{
+    const raw = localStorage.getItem('ampel-cache-'+key);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e){ return null; }
+}
+function ageLabel(ts){
+  const mins = Math.round((Date.now()-ts)/60000);
+  if(mins < 1) return 'gerade eben';
+  if(mins < 60) return `vor ${mins} Min.`;
+  const hours = Math.round(mins/60);
+  if(hours < 24) return `vor ${hours} Std.`;
+  return `vor ${Math.round(hours/24)} Tg.`;
+}
+function renderFromCacheOrError(boardEl, assetLabel, key){
+  const cached = readCachedBoard(key);
+  if(cached){
+    renderBoard(boardEl, assetLabel, cached.price, cached.level, cached.metrics, { stale: true, staleAge: ageLabel(cached.ts) });
+  } else {
+    renderBoardError(boardEl, assetLabel);
+  }
+  return cached;
 }
 
 function fmtChange(v){
@@ -319,11 +414,11 @@ function renderChangeRow(label, changes){
 async function refreshAll(){
   document.getElementById('statusText').textContent = 'Lade Daten…';
 
-  const [goldR, silverR, btcR, btcWmaR, fngR] = await Promise.allSettled([
-    loadBinanceAsset('PAXGUSDT'),
+  const [goldR, silverSpotR, btcR, btcWmaR, fngR] = await Promise.allSettled([
+    loadCryptoAsset('PAXGUSDT', 'pax-gold'),
     loadSilverSpot(),
-    loadBinanceAsset('BTCUSDT'),
-    loadBinanceWeekly200('BTCUSDT'),
+    loadCryptoAsset('BTCUSDT', 'bitcoin'),
+    loadWeekly200('BTCUSDT', 'bitcoin'),
     loadFNG()
   ]);
 
@@ -334,41 +429,52 @@ async function refreshAll(){
   if(goldR.status === 'fulfilled'){
     const gold = goldR.value;
     const a = ampelFromMetal(gold.price, gold.sma200, gold.rsi14);
-    renderBoard(document.querySelector('.board.gold'), 'Gold', gold.price, a.level,
-      `<div class="metric-line"><span>RSI(14)</span><span>${gold.rsi14?.toFixed(1) ?? '–'}</span></div>
-       <div class="metric-line"><span>Abstand 200-Tage-Ø</span><span>${a.distPct.toFixed(1)}%</span></div>`);
+    const metricsHtml = `<div class="metric-line"><span>RSI(14)</span><span>${gold.rsi14?.toFixed(1) ?? '–'}</span></div>
+       <div class="metric-line"><span>Abstand 200-Tage-Ø</span><span>${a.distPct.toFixed(1)}%</span></div>`;
+    renderBoard(document.querySelector('.board.gold'), 'Gold', gold.price, a.level, metricsHtml);
     statuses.gold = a.level;
     changeRows.gold = gold.changes;
     window._lastGoldPrice = gold.price;
+    cacheBoard('gold', { price: gold.price, level: a.level, metrics: metricsHtml, changes: gold.changes });
   } else {
-    renderBoardError(document.querySelector('.board.gold'), 'Gold');
+    const cached = renderFromCacheOrError(document.querySelector('.board.gold'), 'Gold', 'gold');
+    if(cached){ statuses.gold = cached.level; changeRows.gold = cached.changes ?? null; window._lastGoldPrice = cached.price; }
   }
 
-  if(silverR.status === 'fulfilled' && window._lastGoldPrice){
-    const silverPrice = silverR.value;
+  if(silverSpotR.status === 'fulfilled' && window._lastGoldPrice){
+    const silverPrice = silverSpotR.value;
     const ratio = window._lastGoldPrice / silverPrice;
-    const a = ampelFromRatio(ratio);
-    renderBoard(document.querySelector('.board.silver'), 'Silber', silverPrice, a.level,
-      `<div class="metric-line"><span>Gold/Silber-Ratio</span><span>${ratio.toFixed(1)}</span></div>`);
+    let hist = null;
+    try{ hist = await loadSilverHistory(silverPrice); } catch(e){ hist = null; }
+    const a = ampelFromSilver(silverPrice, hist ? hist.sma200 : null, hist ? hist.rsi14 : null, ratio);
+    const metricsHtml = `<div class="metric-line"><span>Gold/Silber-Ratio</span><span>${ratio.toFixed(1)}</span></div>
+       <div class="metric-line"><span>RSI(14)</span><span>${hist && hist.rsi14 ? hist.rsi14.toFixed(1) : '–'}</span></div>
+       <div class="metric-line"><span>Abstand 200-Tage-Ø</span><span>${a.distPct !== null ? a.distPct.toFixed(1)+'%' : '–'}</span></div>`;
+    renderBoard(document.querySelector('.board.silver'), 'Silber', silverPrice, a.level, metricsHtml);
     statuses.silver = a.level;
     document.getElementById('ratioVal').textContent = ratio.toFixed(1);
-    try{ changeRows.silver = await loadSilverChanges(silverPrice); } catch(e){ changeRows.silver = null; }
+    changeRows.silver = hist ? hist.changes : null;
+    cacheBoard('silver', { price: silverPrice, level: a.level, metrics: metricsHtml, changes: changeRows.silver });
   } else {
-    renderBoardError(document.querySelector('.board.silver'), 'Silber');
+    const cached = renderFromCacheOrError(document.querySelector('.board.silver'), 'Silber', 'silver');
+    if(cached){ statuses.silver = cached.level; changeRows.silver = cached.changes ?? null; }
   }
 
   if(btcR.status === 'fulfilled' && btcWmaR.status === 'fulfilled'){
     const btc = btcR.value;
     const wma200 = btcWmaR.value;
-    const a = ampelFromBTC(btc.price, btc.sma200, wma200, fng ? fng.value : null);
-    renderBoard(document.querySelector('.board.btc'), 'Bitcoin', btc.price, a.level,
-      `<div class="metric-line"><span>Fear & Greed</span><span>${fng ? fng.value+' ('+fng.label+')' : '–'}</span></div>
+    const a = ampelFromBTC(btc.price, btc.sma200, wma200, btc.rsi14, fng ? fng.value : null);
+    const metricsHtml = `<div class="metric-line"><span>Fear & Greed</span><span>${fng ? fng.value+' ('+fng.label+')' : '–'}</span></div>
        <div class="metric-line"><span>Mayer-Multiple</span><span>${a.mayer.toFixed(2)}</span></div>
-       <div class="metric-line"><span>200-Wochen-Ø</span><span>${fmtUSD(wma200,0)} (${a.wmaDistPct.toFixed(0)}%)</span></div>`);
+       <div class="metric-line"><span>200-Wochen-Ø</span><span>${fmtUSD(wma200,0)} (${a.wmaDistPct.toFixed(0)}%)</span></div>
+       <div class="metric-line"><span>RSI(14)</span><span>${btc.rsi14?.toFixed(1) ?? '–'}</span></div>`;
+    renderBoard(document.querySelector('.board.btc'), 'Bitcoin', btc.price, a.level, metricsHtml);
     statuses.btc = a.level;
     changeRows.btc = btc.changes;
+    cacheBoard('btc', { price: btc.price, level: a.level, metrics: metricsHtml, changes: btc.changes });
   } else {
-    renderBoardError(document.querySelector('.board.btc'), 'Bitcoin');
+    const cached = renderFromCacheOrError(document.querySelector('.board.btc'), 'Bitcoin', 'btc');
+    if(cached){ statuses.btc = cached.level; changeRows.btc = cached.changes ?? null; }
   }
 
   document.getElementById('changeBody').innerHTML =
@@ -382,10 +488,10 @@ async function refreshAll(){
     document.getElementById('fngLabel').textContent = fng.label;
   }
 
-  const anyOk = [goldR,silverR,btcR].some(r=>r.status==='fulfilled');
+  const anyOk = [goldR,silverSpotR,btcR].some(r=>r.status==='fulfilled');
   document.getElementById('statusText').textContent = anyOk
     ? 'Live · zuletzt aktualisiert ' + new Date().toLocaleTimeString('de-DE')
-    : 'Fehler beim Laden — erneut versuchen';
+    : 'Fehler beim Laden — zeige zwischengespeicherte Werte, falls vorhanden';
 
   if(Object.keys(statuses).length){
     await checkStatusChange(statuses);
